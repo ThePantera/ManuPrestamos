@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Mis Préstamos</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg">
+<meta name="theme-color" content="#1a73e8">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Roboto, Arial, sans-serif; background: #f1f3f4; color: #202124; }
+  header { background: #1a73e8; color: #fff; padding: 16px; font-size: 20px; font-weight: bold; }
+  .tabs { display: flex; background: #fff; border-bottom: 1px solid #ddd; }
+  .tabs button { flex: 1; padding: 14px; border: 0; background: none; font-size: 16px; color: #5f6368; }
+  .tabs button.activo { color: #1a73e8; border-bottom: 3px solid #1a73e8; font-weight: bold; }
+  main { padding: 16px; max-width: 560px; margin: 0 auto; }
+  label { display: block; margin: 14px 0 6px; font-weight: 500; }
+  input { width: 100%; padding: 14px; font-size: 17px; border: 1px solid #ccc; border-radius: 10px; background: #fff; }
+  .fila { display: flex; gap: 10px; } .fila > div { flex: 1; }
+  .btn { width: 100%; margin-top: 22px; padding: 16px; font-size: 18px; border: 0; border-radius: 10px; background: #1a73e8; color: #fff; font-weight: bold; }
+  .btn:disabled { opacity: .6; }
+  .msg { margin-top: 14px; padding: 12px; border-radius: 10px; display: none; }
+  .ok { background: #e6f4ea; color: #137333; } .err { background: #fce8e6; color: #c5221f; }
+  .total { margin-top: 10px; color: #5f6368; }
+  .card { background: #fff; border-radius: 12px; padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.15); border-left: 6px solid #1a73e8; }
+  .card.pronto { border-left-color: #f9ab00; } .card.vencido { border-left-color: #d93025; } .card.pagado { border-left-color: #1e8e3e; opacity: .7; }
+  .card h3 { margin: 0 0 6px; font-size: 18px; }
+  .card p { margin: 3px 0; color: #444; }
+  .etq { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 13px; font-weight: bold; }
+  .acciones { display: flex; gap: 8px; margin-top: 10px; }
+  .acciones a, .acciones button { flex: 1; text-align: center; padding: 10px; border-radius: 8px; border: 1px solid #ccc; background: #fff; font-size: 15px; text-decoration: none; color: #202124; }
+  .vacio { text-align: center; color: #5f6368; margin-top: 40px; }
+  #buscar { margin-bottom: 12px; }
+</style>
+</head>
+<body>
+<header>💰 Mis Préstamos</header>
+<div class="tabs">
+  <button id="tNuevo" class="activo" onclick="verTab('nuevo')">➕ Nuevo</button>
+  <button id="tLista" onclick="verTab('lista')">📋 Préstamos</button>
+  <button id="tConfig" onclick="verTab('config')" style="flex:0 0 56px">⚙️</button>
+</div>
+
+<main>
+  <section id="nuevo">
+    <form id="form" onsubmit="guardar(event)">
+      <label>Nombre</label>
+      <input id="nombre" required placeholder="Nombre de la persona">
+      <label>Teléfono</label>
+      <input id="telefono" type="tel" placeholder="Ej. 5512345678">
+      <div class="fila">
+        <div><label>Monto ($)</label><input id="monto" type="number" step="0.01" min="0" inputmode="decimal" placeholder="Opcional"></div>
+        <div><label>Porcentaje (%)</label><input id="porcentaje" type="number" step="0.01" min="0" inputmode="decimal" required placeholder="Ej. 10"></div>
+      </div>
+      <div class="total" id="total"></div>
+      <label>Fecha del préstamo</label>
+      <input id="fechaPrestamo" type="date" required>
+      <label>Fecha de vencimiento</label>
+      <input id="fechaVencimiento" type="date" required>
+      <button class="btn" id="btnGuardar" type="submit">Guardar préstamo</button>
+      <div class="msg" id="msg"></div>
+    </form>
+  </section>
+
+  <section id="config" style="display:none">
+    <p>Conecta esta página con tu hoja de Google. Solo se hace una vez en cada celular.</p>
+    <label>Enlace de tu Apps Script (termina en /exec)</label>
+    <input id="cfgUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec">
+    <label>Clave secreta</label>
+    <input id="cfgClave" type="password" placeholder="La CLAVE que pusiste en Codigo.gs">
+    <button class="btn" type="button" onclick="guardarConfig()">Guardar y probar</button>
+    <div class="msg" id="msgCfg"></div>
+  </section>
+
+  <section id="lista" style="display:none">
+    <input id="buscar" placeholder="🔎 Buscar por nombre" oninput="pintar()">
+    <div id="tarjetas"></div>
+  </section>
+</main>
+
+<script>
+  var datos = [];
+  var CFG_KEY = 'manuPrestamosCfg';
+
+  function leerCfg() {
+    try { return JSON.parse(localStorage.getItem(CFG_KEY)) || {}; } catch (e) { return {}; }
+  }
+
+  // Llama a tu Apps Script. Usa text/plain para evitar bloqueos CORS.
+  function api(accion, extra) {
+    var cfg = leerCfg();
+    if (!cfg.url || !cfg.clave) return Promise.reject(new Error('Falta conectar tu hoja. Toca ⚙️ arriba.'));
+    var body = Object.assign({ accion: accion, clave: cfg.clave }, extra || {});
+    return fetch(cfg.url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json(); })
+      .catch(function () { throw new Error('No se pudo conectar. Revisa el enlace y que la implementación diga "Cualquier persona".'); })
+      .then(function (r) { if (!r.ok) throw new Error(r.error); return r.data; });
+  }
+
+  function guardarConfig() {
+    var url = document.getElementById('cfgUrl').value.trim();
+    var clave = document.getElementById('cfgClave').value;
+    var m = document.getElementById('msgCfg');
+    function msgCfg(t, ok) { m.textContent = t; m.className = 'msg ' + (ok ? 'ok' : 'err'); m.style.display = 'block'; }
+    if (!/^https:\/\/script\.google\.com\/.+\/exec$/.test(url)) { msgCfg('❌ El enlace debe empezar con https://script.google.com y terminar en /exec', false); return; }
+    try { localStorage.setItem(CFG_KEY, JSON.stringify({ url: url, clave: clave })); } catch (e) {}
+    msgCfg('Probando conexión...', true);
+    api('probar').then(function () { msgCfg('✅ ¡Conectado a tu hoja!', true); })
+      .catch(function (err) { msgCfg('❌ ' + err.message, false); });
+  }
+
+  function hoyISO() {
+    var d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 10);
+  }
+  document.getElementById('fechaPrestamo').value = hoyISO();
+
+  function calcularTotal() {
+    var m = parseFloat(document.getElementById('monto').value) || 0;
+    var p = parseFloat(document.getElementById('porcentaje').value) || 0;
+    document.getElementById('total').textContent = m ? 'Total a cobrar: $' + (m * (1 + p / 100)).toFixed(2) : '';
+  }
+  document.getElementById('monto').oninput = calcularTotal;
+  document.getElementById('porcentaje').oninput = calcularTotal;
+
+  function verTab(t) {
+    ['nuevo', 'lista', 'config'].forEach(function (x) {
+      document.getElementById(x).style.display = t === x ? '' : 'none';
+    });
+    document.getElementById('tNuevo').className = t === 'nuevo' ? 'activo' : '';
+    document.getElementById('tLista').className = t === 'lista' ? 'activo' : '';
+    document.getElementById('tConfig').className = t === 'config' ? 'activo' : '';
+    if (t === 'lista') cargar();
+    if (t === 'config') { var c = leerCfg(); document.getElementById('cfgUrl').value = c.url || ''; document.getElementById('cfgClave').value = c.clave || ''; }
+  }
+  if (!leerCfg().url) verTab('config');
+
+  function mensaje(texto, ok) {
+    var m = document.getElementById('msg');
+    m.textContent = texto; m.className = 'msg ' + (ok ? 'ok' : 'err'); m.style.display = 'block';
+  }
+
+  function guardar(e) {
+    e.preventDefault();
+    var btn = document.getElementById('btnGuardar');
+    btn.disabled = true; btn.textContent = 'Guardando...';
+    var d = {};
+    ['nombre', 'telefono', 'monto', 'porcentaje', 'fechaPrestamo', 'fechaVencimiento'].forEach(function (k) {
+      d[k] = document.getElementById(k).value;
+    });
+    api('guardar', { datos: d })
+      .then(function () {
+        btn.disabled = false; btn.textContent = 'Guardar préstamo';
+        mensaje('✅ Préstamo de ' + d.nombre + ' guardado.', true);
+        document.getElementById('form').reset();
+        document.getElementById('fechaPrestamo').value = hoyISO();
+        calcularTotal();
+      })
+      .catch(function (err) {
+        btn.disabled = false; btn.textContent = 'Guardar préstamo';
+        mensaje('❌ ' + err.message, false);
+      });
+  }
+
+  function cargar() {
+    document.getElementById('tarjetas').innerHTML = '<p class="vacio">Cargando...</p>';
+    api('listar').then(function (r) { datos = r; pintar(); })
+      .catch(function (err) {
+        document.getElementById('tarjetas').innerHTML = '';
+        var p = document.createElement('p'); p.className = 'vacio'; p.textContent = 'Error: ' + err.message;
+        document.getElementById('tarjetas').appendChild(p);
+      });
+  }
+
+  function el(tag, cls, txt) {
+    var x = document.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x;
+  }
+
+  function pintar() {
+    var cont = document.getElementById('tarjetas'); cont.innerHTML = '';
+    var q = document.getElementById('buscar').value.toLowerCase();
+    var lista = datos.filter(function (p) { return String(p.nombre).toLowerCase().indexOf(q) >= 0; });
+    if (!lista.length) { cont.appendChild(el('p', 'vacio', 'No hay préstamos todavía.')); return; }
+
+    lista.forEach(function (p) {
+      var pagado = p.estado === 'Pagado';
+      var clase = 'card', etiqueta = '', color = '#1a73e8';
+      if (pagado) { clase += ' pagado'; etiqueta = 'Pagado'; color = '#1e8e3e'; }
+      else if (p.dias < 0) { clase += ' vencido'; etiqueta = 'Vencido hace ' + (-p.dias) + ' día(s)'; color = '#d93025'; }
+      else if (p.dias === 0) { clase += ' vencido'; etiqueta = 'Vence HOY'; color = '#d93025'; }
+      else if (p.dias <= 3) { clase += ' pronto'; etiqueta = 'Vence en ' + p.dias + ' día(s)'; color = '#e37400'; }
+      else { etiqueta = 'Faltan ' + p.dias + ' días'; }
+
+      var c = el('div', clase);
+      c.appendChild(el('h3', null, p.nombre));
+      var e = el('span', 'etq', etiqueta); e.style.background = color + '22'; e.style.color = color; c.appendChild(e);
+      if (p.telefono) c.appendChild(el('p', null, '📞 ' + p.telefono));
+      var txt = '💵 ' + (p.monto ? '$' + Number(p.monto).toFixed(2) + ' · ' : '') + p.porcentaje + '%';
+      if (p.total) txt += ' → cobrar $' + Number(p.total).toFixed(2);
+      c.appendChild(el('p', null, txt));
+      c.appendChild(el('p', null, '📅 ' + p.fechaPrestamo + '  →  ' + p.fechaVencimiento));
+
+      var acc = el('div', 'acciones');
+      if (p.telefono) {
+        var num = String(p.telefono).replace(/\D/g, '');
+        var tel = el('a', null, '📞 Llamar'); tel.href = 'tel:' + num; acc.appendChild(tel);
+        var wa = el('a', null, '💬 WhatsApp'); wa.href = 'https://wa.me/' + num; wa.target = '_blank'; acc.appendChild(wa);
+      }
+      var b = el('button', null, pagado ? '↩️ Pendiente' : '✅ Pagado');
+      b.onclick = function () {
+        b.disabled = true;
+        api('estado', { id: p.id, estado: pagado ? 'Pendiente' : 'Pagado' }).then(cargar)
+          .catch(function (err) { b.disabled = false; alert(err.message); });
+      };
+      acc.appendChild(b);
+      c.appendChild(acc);
+      cont.appendChild(c);
+    });
+  }
+</script>
+</body>
+</html>
