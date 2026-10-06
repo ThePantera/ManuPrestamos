@@ -21,7 +21,8 @@
     duda: { m: ['www', '..w', '.ww', '...', '.w.'], c: { w: C.brillo } },
     zeta: { m: ['zzz', '..z', '.z.', 'z..', 'zzz'], c: { z: C.zz } },
     billete: { m: ['ggggggg', 'gGGvGGg', 'gGvvvGg', 'gGGvGGg', 'ggggggg'], c: { g: C.verdeOsc, G: C.verde, v: C.verdeOsc } },
-    estrella: { m: ['..y..', '.yyy.', 'yyyyy', '.yyy.', '..y..'], c: { y: C.oro } }
+    estrella: { m: ['..y..', '.yyy.', 'yyyyy', '.yyy.', '..y..'], c: { y: C.oro } },
+    reloj: { m: ['.ooo.', 'owbwo', 'owbbo', 'owwwo', '.ooo.'], c: { o: C.oroOsc, w: C.brillo, b: C.negro } }
   };
 
   // Cambios de la cara para cada expresión: [x, y, color]
@@ -50,6 +51,16 @@
     mueca: filas(19, 25, [P.labio, P.labio, P.labio, P.blanco, P.blanco, P.labio])
   };
 
+  // Brazo levantado señalando hacia arriba (lado derecho del dibujo). sube = 0 o 1 para que se mueva.
+  function brazo(sube) {
+    var r = [], y0 = 22 - sube;
+    for (var y = y0; y <= 36; y++) r.push([36, y, P.negro], [37, y, '#374151'], [38, y, '#1f2937'], [39, y, '#1f2937'], [40, y, P.negro]);
+    for (var y2 = y0 - 4; y2 < y0; y2++) r.push([36, y2, P.negro], [37, y2, P.piel], [38, y2, P.piel], [39, y2, '#ac7150'], [40, y2, P.negro]);
+    for (var y3 = y0 - 9; y3 < y0 - 4; y3++) r.push([37, y3, P.negro], [38, y3, P.piel], [39, y3, P.negro]);
+    r.push([38, y0 - 10, P.negro], [36, y0 - 5, P.negro], [40, y0 - 5, P.negro]);
+    return r;
+  }
+
   var CARAS = {
     normal: [],
     parpadeo: [OJOS.cerrados],
@@ -62,18 +73,23 @@
   };
 
   var POS = [[34, 6], [5, 8], [36, 16], [3, 18]];
-  var cv, ctx, bubble, base, cara = 'normal', icono = null, t = 0, reloj = null, ultimo = Date.now();
+  var FRASES_PASEO = ['¡Vamos, hay que cargar los préstamos!', '¡El tiempo apremia, campeón!', '¿Quién nos debe hoy? ¡A trabajar!', '¡Arriba, Manu! Esos préstamos no se anotan solos.'];
+  var cabecera, paseo = null, cargando = 0;
+  var cv, ctx, bubble, base, recorte, cara = 'normal', icono = null, t = 0, reloj = null, ultimo = Date.now();
   var quieto = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   function pintar() {
     ctx.clearRect(0, 0, N, N);
-    if (base.complete && base.naturalWidth) ctx.drawImage(base, 0, 0, N, N);
-    (CARAS[cara] || []).forEach(function (capa) {
+    var img = paseo && recorte.complete && recorte.naturalWidth ? recorte : base;
+    if (img.complete && img.naturalWidth) ctx.drawImage(img, 0, 0, N, N);
+    var capas = (CARAS[cara] || []).slice();
+    if (paseo) capas.push(brazo(Math.floor(t / 3) % 2));
+    capas.forEach(function (capa) {
       capa.forEach(function (p) { ctx.fillStyle = p[2]; ctx.fillRect(p[0], p[1], 1, 1); });
     });
     if (icono && ICONOS[icono]) {
       var ic = ICONOS[icono];
-      var cuantos = icono === 'zeta' ? 2 : (icono === 'alerta' || icono === 'duda' ? 1 : 4);
+      var cuantos = icono === 'zeta' ? 2 : (icono === 'alerta' || icono === 'duda' ? 1 : (paseo ? 2 : 4));
       for (var k = 0; k < cuantos; k++) {
         var dy = quieto ? 0 : Math.round(Math.sin(t / 2 + k * 1.7) * 1.5);
         dibujarIcono(ic, POS[k][0], POS[k][1] + dy);
@@ -95,8 +111,9 @@
     t++;
     // Parpadeo natural cuando está en reposo.
     if (cara === 'normal' && t % 28 === 0) { cara = 'parpadeo'; setTimeout(function () { if (cara === 'parpadeo') cara = 'normal'; }, 160); }
-    // Si nadie lo toca en 45 s, se duerme.
-    if (cara === 'normal' && Date.now() - ultimo > 45000) { cara = 'dormido'; icono = 'zeta'; texto('Zzz... avísame cuando haya otro préstamo.'); }
+    // Si nada pasa en 10 s, se pone a caminar y a apurarte.
+    if (!paseo && cara === 'normal' && cargando === 0 && Date.now() - ultimo > 10000) empezarPaseo();
+    if (paseo) moverPaseo();
     pintar();
   }
 
@@ -106,18 +123,61 @@
     bubble.classList.remove('pop'); void bubble.offsetWidth; bubble.classList.add('pop');
   }
 
+  function empezarPaseo() {
+    paseo = { x: 0, dir: 1, ticks: 0, frase: 0 };
+    cara = 'feliz'; icono = 'reloj';
+    cabecera.classList.add('paseo');
+    texto(FRASES_PASEO[0]);
+  }
+
+  function moverPaseo() {
+    paseo.ticks++;
+    var max = Math.max(0, cabecera.clientWidth - cv.offsetWidth - 32);
+    if (!quieto) {
+      paseo.x += paseo.dir * 6;
+      if (paseo.x >= max) { paseo.x = max; paseo.dir = -1; }
+      if (paseo.x <= 0) { paseo.x = 0; paseo.dir = 1; }
+    }
+    var salto = (!quieto && Math.floor(paseo.ticks / 2) % 2) ? -3 : 0;
+    cv.style.left = (16 + paseo.x) + 'px';
+    cv.style.transform = 'translateY(' + salto + 'px) scaleX(' + paseo.dir + ')';
+    cara = Math.floor(paseo.ticks / 14) % 2 ? 'sorpresa' : 'feliz';
+    if (paseo.ticks % 30 === 0) { paseo.frase = (paseo.frase + 1) % FRASES_PASEO.length; texto(FRASES_PASEO[paseo.frase]); }
+    // Después de unos 40 s caminando se cansa y se duerme.
+    if (paseo.ticks > 285) { terminarPaseo(); cara = 'dormido'; icono = 'zeta'; texto('Zzz... avísame cuando haya otro préstamo.'); }
+  }
+
+  function terminarPaseo() {
+    if (!paseo) return;
+    paseo = null;
+    cabecera.classList.remove('paseo');
+    cv.style.left = ''; cv.style.transform = '';
+    cara = 'normal'; icono = null;
+  }
+
+  function actividad() {
+    ultimo = Date.now();
+    if (paseo) { terminarPaseo(); texto('¡Eso! Manos a la obra.'); pintar(); }
+    else if (cara === 'dormido') Avatar.decir('sorpresa', '¡Ah! Aquí estoy, aquí estoy.', 'alerta');
+  }
+
   var vuelta = null;
   window.Avatar = {
     init: function (canvas, globo) {
       cv = canvas; bubble = globo; ctx = cv.getContext('2d');
+      cabecera = cv.closest('header') || cv.parentNode;
+      ['pointerdown', 'keydown', 'input', 'focusin'].forEach(function (ev) { document.addEventListener(ev, actividad, true); });
+      window.addEventListener('scroll', actividad, { passive: true });
       cv.width = N; cv.height = N;
       base = new Image(); base.onload = pintar; base.src = 'avatar.png';
+      recorte = new Image(); recorte.src = 'avatar-recorte.png'; // sin fondo, para caminar
       reloj = setInterval(animar, 140);
       cv.addEventListener('click', function () { Avatar.travesura(); });
     },
     /** Cambia la cara, el texto y el icono. Vuelve a normal después de `ms` (0 = se queda). */
     decir: function (nuevaCara, msg, nuevoIcono, ms) {
       ultimo = Date.now();
+      terminarPaseo();
       cara = nuevaCara || 'normal'; icono = nuevoIcono || null;
       if (msg) texto(msg);
       pintar();
@@ -134,6 +194,8 @@
       ][Math.floor(Math.random() * 5)];
       Avatar.decir(r[0], r[1], r[2]);
     },
-    despertar: function () { ultimo = Date.now(); if (cara === 'dormido') Avatar.decir('sorpresa', '¡Ah! Aquí estoy, aquí estoy.', 'alerta'); }
+    despertar: actividad,
+    /** Marca que la página está cargando algo (+1) o terminó (-1), para no caminar mientras tanto. */
+    ocupado: function (n) { cargando = Math.max(0, cargando + n); ultimo = Date.now(); }
   };
 })();

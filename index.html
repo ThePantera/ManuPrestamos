@@ -12,7 +12,14 @@
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; font-family: Roboto, Arial, sans-serif; background: #f1f3f4; color: #202124; }
-  header { background: #0b0f1a; color: #fff; padding: 14px 16px; display: flex; align-items: center; gap: 14px; }
+  header { position: relative; overflow: hidden; min-height: 164px; background: #0b0f1a; color: #fff; padding: 14px 16px; display: flex; align-items: center; gap: 14px; }
+  header { transition: background .4s; }
+  header.paseo { background: linear-gradient(#0284c7 0 88%, #0369a1 88%); }
+  header.paseo #globo { box-shadow: 3px 3px 0 #0b0f1a; }
+  header.paseo .hero-txt { position: absolute; top: 10px; left: 16px; right: 16px; }
+  header.paseo .hero-txt h1 { display: none; }
+  header.paseo #globo::before { display: none; }
+  header.paseo #avatar { position: absolute; bottom: 6px; width: 84px; height: 84px; border: 0; background: none; transition: left .14s linear; }
   #avatar { width: 112px; height: 112px; flex: none; image-rendering: pixelated; border-radius: 14px; border: 3px solid #0ea5e9; cursor: pointer; background: #0284c7; }
   .hero-txt { min-width: 0; flex: 1; }
   .hero-txt h1 { margin: 0 0 6px; font: 700 22px 'Pixelify Sans', Roboto, sans-serif; letter-spacing: .5px; color: #e0f2fe; }
@@ -99,7 +106,6 @@
 <script>
   var datos = [];
   Avatar.init(document.getElementById('avatar'), document.getElementById('globo'));
-  document.addEventListener('focusin', function () { Avatar.despertar(); });
   var CFG_KEY = 'manuPrestamosCfg';
 
   function leerCfg() {
@@ -111,10 +117,12 @@
     var cfg = leerCfg();
     if (!cfg.url || !cfg.clave) return Promise.reject(new Error('Falta conectar tu hoja. Toca ⚙️ arriba.'));
     var body = Object.assign({ accion: accion, clave: cfg.clave }, extra || {});
+    Avatar.ocupado(1);
     return fetch(cfg.url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) })
       .then(function (r) { return r.json(); })
       .catch(function () { throw new Error('No se pudo conectar. Revisa el enlace y que la implementación diga "Cualquier persona".'); })
-      .then(function (r) { if (!r.ok) throw new Error(r.error); return r.data; });
+      .then(function (r) { Avatar.ocupado(-1); if (!r.ok) throw new Error(r.error); return r.data; },
+            function (e) { Avatar.ocupado(-1); throw e; });
   }
 
   function guardarConfig() {
