@@ -45,7 +45,20 @@
   .card h3 { margin: 0 0 6px; font-size: 18px; }
   .card p { margin: 3px 0; color: #444; }
   .etq { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 13px; font-weight: bold; }
-  .acciones { display: flex; gap: 8px; margin-top: 10px; }
+  .acciones { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .acciones a, .acciones button { min-width: 40%; }
+  .barra { height: 10px; background: #e8eef3; border-radius: 6px; overflow: hidden; margin: 8px 0 4px; }
+  .barra div { height: 100%; background: #1e8e3e; }
+  .falta { font-weight: bold; color: #202124; }
+  .panel { margin-top: 10px; padding: 12px; background: #f1f6f9; border-radius: 10px; }
+  .panel .fila input { padding: 10px; font-size: 16px; }
+  .panel label { margin: 8px 0 4px; font-size: 14px; }
+  .panel .btn { margin-top: 12px; padding: 12px; font-size: 16px; background: #1e8e3e; }
+  .panel .msg { margin-top: 8px; }
+  .hist { list-style: none; margin: 0; padding: 0; }
+  .hist li { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid #dde5ea; font-size: 15px; }
+  .hist li:last-child { border-bottom: 0; }
+  .hist .nota { color: #5f6368; font-size: 13px; }
   .acciones a, .acciones button { flex: 1; text-align: center; padding: 10px; border-radius: 8px; border: 1px solid #ccc; background: #fff; font-size: 15px; text-decoration: none; color: #202124; }
   .vacio { text-align: center; color: #5f6368; margin-top: 40px; }
   #buscar { margin-bottom: 12px; }
@@ -76,6 +89,8 @@
         <div><label>Monto ($)</label><input id="monto" type="number" step="0.01" min="0" inputmode="decimal" placeholder="Opcional"></div>
         <div><label>Porcentaje (%)</label><input id="porcentaje" type="number" step="0.01" min="0" inputmode="decimal" required placeholder="Ej. 10"></div>
       </div>
+      <label>Número de cuotas (opcional)</label>
+      <input id="cuotas" type="number" min="1" step="1" inputmode="numeric" placeholder="Ej. 4 pagos">
       <div class="total" id="total"></div>
       <label>Fecha del préstamo</label>
       <input id="fechaPrestamo" type="date" required>
@@ -147,10 +162,15 @@
   function calcularTotal() {
     var m = parseFloat(document.getElementById('monto').value) || 0;
     var p = parseFloat(document.getElementById('porcentaje').value) || 0;
-    document.getElementById('total').textContent = m ? 'Total a cobrar: $' + (m * (1 + p / 100)).toFixed(2) : '';
+    var n = parseInt(document.getElementById('cuotas').value, 10) || 0;
+    var t = m * (1 + p / 100);
+    var txt = m ? 'Total a cobrar: $' + t.toFixed(2) : '';
+    if (m && n > 0) txt += ' · ' + n + ' cuotas de $' + (t / n).toFixed(2);
+    document.getElementById('total').textContent = txt;
   }
   document.getElementById('monto').oninput = calcularTotal;
   document.getElementById('porcentaje').oninput = calcularTotal;
+  document.getElementById('cuotas').oninput = calcularTotal;
 
   function verTab(t) {
     ['nuevo', 'lista', 'config'].forEach(function (x) {
@@ -180,7 +200,7 @@
     Avatar.decir('sorpresa', 'Anotando en tu hoja...', null, 0);
     btn.disabled = true; btn.textContent = 'Guardando...';
     var d = {};
-    ['nombre', 'telefono', 'monto', 'porcentaje', 'fechaPrestamo', 'fechaVencimiento'].forEach(function (k) {
+    ['nombre', 'telefono', 'monto', 'porcentaje', 'cuotas', 'fechaPrestamo', 'fechaVencimiento'].forEach(function (k) {
       d[k] = document.getElementById(k).value;
     });
     api('guardar', { datos: d })
@@ -199,9 +219,11 @@
       });
   }
 
-  function cargar() {
+  function dinero(n) { return '$' + Number(n || 0).toFixed(2); }
+
+  function cargar(sinComentario) {
     document.getElementById('tarjetas').innerHTML = '<p class="vacio">Cargando...</p>';
-    api('listar').then(function (r) { datos = r; pintar(); comentarLista(); })
+    api('listar').then(function (r) { datos = r; pintar(); if (sinComentario !== true) comentarLista(); })
       .catch(function (err) {
         document.getElementById('tarjetas').innerHTML = '';
         var p = document.createElement('p'); p.className = 'vacio'; p.textContent = 'Error: ' + err.message;
@@ -229,6 +251,62 @@
     if (v >= 20 && !avisoPct) { avisoPct = true; Avatar.decir('sorpresa', '¡Uf, ' + v + '%! Buen negocio.', 'billete'); }
   });
 
+  function abrirAbono(p, panel) {
+    if (!panel.hidden && panel.dataset.modo === 'abono') { panel.hidden = true; return; }
+    panel.dataset.modo = 'abono'; panel.hidden = false; panel.innerHTML = '';
+    var sugerido = p.cuota ? Math.min(p.cuota, p.saldo || p.cuota) : (p.saldo || '');
+    var fila = el('div', 'fila');
+    var c1 = el('div'); c1.appendChild(el('label', null, 'Monto del abono'));
+    var monto = el('input'); monto.type = 'number'; monto.step = '0.01'; monto.min = '0'; monto.inputMode = 'decimal';
+    if (sugerido) monto.value = Number(sugerido).toFixed(2);
+    c1.appendChild(monto);
+    var c2 = el('div'); c2.appendChild(el('label', null, 'Fecha'));
+    var fecha = el('input'); fecha.type = 'date'; fecha.value = hoyISO(); c2.appendChild(fecha);
+    fila.appendChild(c1); fila.appendChild(c2); panel.appendChild(fila);
+    panel.appendChild(el('label', null, 'Nota (opcional)'));
+    var nota = el('input'); nota.placeholder = 'Ej. cuota 2, transferencia'; panel.appendChild(nota);
+    if (p.saldo !== '') panel.appendChild(el('p', 'nota', 'Le falta pagar ' + dinero(p.saldo) + (p.cuota ? ' · cuota de ' + dinero(p.cuota) : '')));
+    var g = el('button', 'btn', 'Guardar abono'); g.type = 'button'; panel.appendChild(g);
+    var m = el('div', 'msg'); panel.appendChild(m);
+    monto.focus();
+    g.onclick = function () {
+      var v = parseFloat(monto.value);
+      if (!(v > 0)) { m.textContent = '❌ Escribe cuánto te abonaron.'; m.className = 'msg err'; m.style.display = 'block'; return; }
+      g.disabled = true; g.textContent = 'Guardando...';
+      Avatar.decir('sorpresa', 'Anotando el abono de ' + p.nombre + '...', null, 0);
+      api('abonar', { datos: { id: p.id, monto: v, fecha: fecha.value, nota: nota.value } })
+        .then(function (r) {
+          cargar(true);
+          if (r.liquidado) Avatar.decir('cool', '¡' + p.nombre + ' terminó de pagar! Préstamo liquidado.', 'billete', 6000);
+          else if (r.saldo !== '') Avatar.decir('feliz', '¡Abono de ' + dinero(v) + '! A ' + p.nombre + ' le faltan ' + dinero(r.saldo) + '.', 'moneda', 6000);
+          else Avatar.decir('feliz', '¡Abono de ' + dinero(v) + ' anotado!', 'moneda', 5000);
+        })
+        .catch(function (err) {
+          g.disabled = false; g.textContent = 'Guardar abono';
+          m.textContent = '❌ ' + err.message; m.className = 'msg err'; m.style.display = 'block';
+          Avatar.decir('triste', 'Uy... ' + err.message, 'gota', 6000);
+        });
+    };
+  }
+
+  function verAbonos(p, panel) {
+    if (!panel.hidden && panel.dataset.modo === 'hist') { panel.hidden = true; return; }
+    panel.dataset.modo = 'hist'; panel.hidden = false; panel.innerHTML = '';
+    panel.appendChild(el('p', 'nota', 'Cargando abonos...'));
+    api('abonos', { id: p.id }).then(function (lista) {
+      panel.innerHTML = '';
+      var ul = el('ul', 'hist');
+      lista.forEach(function (a) {
+        var li = el('li');
+        var izq = el('div'); izq.appendChild(el('div', null, '📅 ' + a.fecha));
+        if (a.nota) izq.appendChild(el('div', 'nota', a.nota));
+        li.appendChild(izq); li.appendChild(el('b', null, dinero(a.monto)));
+        ul.appendChild(li);
+      });
+      panel.appendChild(ul);
+    }).catch(function (err) { panel.innerHTML = ''; panel.appendChild(el('p', 'nota', '❌ ' + err.message)); });
+  }
+
   function pintar() {
     var cont = document.getElementById('tarjetas'); cont.innerHTML = '';
     var q = document.getElementById('buscar').value.toLowerCase();
@@ -249,8 +327,20 @@
       var e = el('span', 'etq', etiqueta); e.style.background = color + '22'; e.style.color = color; c.appendChild(e);
       if (p.telefono) c.appendChild(el('p', null, '📞 ' + p.telefono));
       var txt = '💵 ' + (p.monto ? '$' + Number(p.monto).toFixed(2) + ' · ' : '') + p.porcentaje + '%';
-      if (p.total) txt += ' → cobrar $' + Number(p.total).toFixed(2);
+      if (p.total) txt += ' → cobrar ' + dinero(p.total);
       c.appendChild(el('p', null, txt));
+      if (p.total) {
+        var pct = Math.min(100, Math.round((p.abonado / p.total) * 100)) || 0;
+        var barra = el('div', 'barra'); var lleno = el('div'); lleno.style.width = pct + '%'; barra.appendChild(lleno); c.appendChild(barra);
+        var linea = el('p'); linea.appendChild(document.createTextNode('Abonado ' + dinero(p.abonado) + ' de ' + dinero(p.total) + ' · '));
+        linea.appendChild(el('span', 'falta', 'Falta ' + dinero(p.saldo))); c.appendChild(linea);
+      } else if (p.abonado) {
+        c.appendChild(el('p', null, 'Abonado ' + dinero(p.abonado)));
+      }
+      if (p.cuotas && p.cuota) {
+        var pagadas = Math.min(p.cuotas, Math.floor(p.abonado / p.cuota + 0.001));
+        c.appendChild(el('p', null, '🧮 Cuotas: ' + pagadas + ' de ' + p.cuotas + ' (' + dinero(p.cuota) + ' c/u)'));
+      }
       c.appendChild(el('p', null, '📅 ' + p.fechaPrestamo + '  →  ' + p.fechaVencimiento));
 
       var acc = el('div', 'acciones');
@@ -259,11 +349,22 @@
         var tel = el('a', null, '📞 Llamar'); tel.href = 'tel:' + num; acc.appendChild(tel);
         var wa = el('a', null, '💬 WhatsApp'); wa.href = 'https://wa.me/' + num; wa.target = '_blank'; acc.appendChild(wa);
       }
+      var panel = el('div', 'panel'); panel.hidden = true;
+      if (!pagado) {
+        var ba = el('button', null, '💵 Abonar');
+        ba.onclick = function () { abrirAbono(p, panel); };
+        acc.appendChild(ba);
+      }
+      if (p.numAbonos) {
+        var bh = el('button', null, '🧾 Abonos (' + p.numAbonos + ')');
+        bh.onclick = function () { verAbonos(p, panel); };
+        acc.appendChild(bh);
+      }
       var b = el('button', null, pagado ? '↩️ Pendiente' : '✅ Pagado');
       b.onclick = function () {
         b.disabled = true;
         api('estado', { id: p.id, estado: pagado ? 'Pendiente' : 'Pagado' }).then(function () {
-            cargar();
+            cargar(true);
             setTimeout(function () {
               if (pagado) Avatar.decir('pensando', 'Listo, ' + p.nombre + ' vuelve a pendiente.', 'duda');
               else Avatar.decir('feliz', '¡Cobrado! ' + p.nombre + ' ya te pagó.', 'billete', 5000);
@@ -273,6 +374,7 @@
       };
       acc.appendChild(b);
       c.appendChild(acc);
+      c.appendChild(panel);
       cont.appendChild(c);
     });
   }
