@@ -3,27 +3,37 @@
 <head>
 <title>Mis Préstamos</title>
 <link rel="manifest" href="manifest.json">
-<link rel="icon" href="icon.svg">
-<meta name="theme-color" content="#1a73e8">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-512.png">
+<meta name="theme-color" content="#0b0f1a">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&display=swap">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; font-family: Roboto, Arial, sans-serif; background: #f1f3f4; color: #202124; }
-  header { background: #1a73e8; color: #fff; padding: 16px; font-size: 20px; font-weight: bold; }
+  header { background: #0b0f1a; color: #fff; padding: 14px 16px; display: flex; align-items: center; gap: 14px; }
+  #avatar { width: 112px; height: 112px; flex: none; image-rendering: pixelated; border-radius: 14px; border: 3px solid #0ea5e9; cursor: pointer; background: #0284c7; }
+  .hero-txt { min-width: 0; flex: 1; }
+  .hero-txt h1 { margin: 0 0 6px; font: 700 22px 'Pixelify Sans', Roboto, sans-serif; letter-spacing: .5px; color: #e0f2fe; }
+  #globo { position: relative; background: #fff; color: #0b0f1a; font: 500 15px/1.3 'Pixelify Sans', Roboto, sans-serif; padding: 8px 10px; border-radius: 4px; box-shadow: 3px 3px 0 #0ea5e9; }
+  #globo::before { content: ''; position: absolute; left: -8px; top: 12px; border: 4px solid transparent; border-right: 4px solid #fff; border-width: 4px 8px 4px 0; }
+  #globo.pop { animation: pop .25s steps(3); }
+  @keyframes pop { from { transform: scale(.85); } to { transform: scale(1); } }
+  @media (prefers-reduced-motion: reduce) { #globo.pop { animation: none; } }
   .tabs { display: flex; background: #fff; border-bottom: 1px solid #ddd; }
   .tabs button { flex: 1; padding: 14px; border: 0; background: none; font-size: 16px; color: #5f6368; }
-  .tabs button.activo { color: #1a73e8; border-bottom: 3px solid #1a73e8; font-weight: bold; }
+  .tabs button.activo { color: #0284c7; border-bottom: 3px solid #0284c7; font-weight: bold; }
   main { padding: 16px; max-width: 560px; margin: 0 auto; }
   label { display: block; margin: 14px 0 6px; font-weight: 500; }
   input { width: 100%; padding: 14px; font-size: 17px; border: 1px solid #ccc; border-radius: 10px; background: #fff; }
   .fila { display: flex; gap: 10px; } .fila > div { flex: 1; }
-  .btn { width: 100%; margin-top: 22px; padding: 16px; font-size: 18px; border: 0; border-radius: 10px; background: #1a73e8; color: #fff; font-weight: bold; }
+  .btn { width: 100%; margin-top: 22px; padding: 16px; font-size: 18px; border: 0; border-radius: 10px; background: #0284c7; color: #fff; font-weight: bold; }
   .btn:disabled { opacity: .6; }
   .msg { margin-top: 14px; padding: 12px; border-radius: 10px; display: none; }
   .ok { background: #e6f4ea; color: #137333; } .err { background: #fce8e6; color: #c5221f; }
   .total { margin-top: 10px; color: #5f6368; }
-  .card { background: #fff; border-radius: 12px; padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.15); border-left: 6px solid #1a73e8; }
+  .card { background: #fff; border-radius: 12px; padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.15); border-left: 6px solid #0284c7; }
   .card.pronto { border-left-color: #f9ab00; } .card.vencido { border-left-color: #d93025; } .card.pagado { border-left-color: #1e8e3e; opacity: .7; }
   .card h3 { margin: 0 0 6px; font-size: 18px; }
   .card p { margin: 3px 0; color: #444; }
@@ -35,7 +45,13 @@
 </style>
 </head>
 <body>
-<header>💰 Mis Préstamos</header>
+<header>
+  <canvas id="avatar" width="44" height="44" aria-label="Avatar de Manu" title="Tócame"></canvas>
+  <div class="hero-txt">
+    <h1>Mis Préstamos</h1>
+    <div id="globo" aria-live="polite">¡Hola Manu!</div>
+  </div>
+</header>
 <div class="tabs">
   <button id="tNuevo" class="activo" onclick="verTab('nuevo')">➕ Nuevo</button>
   <button id="tLista" onclick="verTab('lista')">📋 Préstamos</button>
@@ -79,8 +95,11 @@
   </section>
 </main>
 
+<script src="avatar.js"></script>
 <script>
   var datos = [];
+  Avatar.init(document.getElementById('avatar'), document.getElementById('globo'));
+  document.addEventListener('focusin', function () { Avatar.despertar(); });
   var CFG_KEY = 'manuPrestamosCfg';
 
   function leerCfg() {
@@ -106,8 +125,9 @@
     if (!/^https:\/\/script\.google\.com\/.+\/exec$/.test(url)) { msgCfg('❌ El enlace debe empezar con https://script.google.com y terminar en /exec', false); return; }
     try { localStorage.setItem(CFG_KEY, JSON.stringify({ url: url, clave: clave })); } catch (e) {}
     msgCfg('Probando conexión...', true);
-    api('probar').then(function () { msgCfg('✅ ¡Conectado a tu hoja!', true); })
-      .catch(function (err) { msgCfg('❌ ' + err.message, false); });
+    Avatar.decir('sorpresa', 'Probando la conexión...', null, 0);
+    api('probar').then(function () { msgCfg('✅ ¡Conectado a tu hoja!', true); Avatar.decir('cool', '¡Conectado! Ya estamos en línea.', 'estrella'); })
+      .catch(function (err) { msgCfg('❌ ' + err.message, false); Avatar.decir('triste', 'Uy... ' + err.message, 'gota', 6000); });
   }
 
   function hoyISO() {
@@ -134,7 +154,12 @@
     if (t === 'lista') cargar();
     if (t === 'config') { var c = leerCfg(); document.getElementById('cfgUrl').value = c.url || ''; document.getElementById('cfgClave').value = c.clave || ''; }
   }
-  if (!leerCfg().url) verTab('config');
+  if (!leerCfg().url) {
+    verTab('config');
+    Avatar.decir('pensando', '¡Hola Manu! Primero conéctame a tu hoja aquí abajo.', 'duda', 0);
+  } else {
+    Avatar.decir('feliz', '¡Hola Manu! ¿A quién le prestamos hoy?', 'moneda', 5000);
+  }
 
   function mensaje(texto, ok) {
     var m = document.getElementById('msg');
@@ -144,6 +169,7 @@
   function guardar(e) {
     e.preventDefault();
     var btn = document.getElementById('btnGuardar');
+    Avatar.decir('sorpresa', 'Anotando en tu hoja...', null, 0);
     btn.disabled = true; btn.textContent = 'Guardando...';
     var d = {};
     ['nombre', 'telefono', 'monto', 'porcentaje', 'fechaPrestamo', 'fechaVencimiento'].forEach(function (k) {
@@ -153,6 +179,7 @@
       .then(function () {
         btn.disabled = false; btn.textContent = 'Guardar préstamo';
         mensaje('✅ Préstamo de ' + d.nombre + ' guardado.', true);
+        Avatar.decir('feliz', '¡Anotado! ' + d.nombre + ' ya está en la hoja.', 'moneda', 5000);
         document.getElementById('form').reset();
         document.getElementById('fechaPrestamo').value = hoyISO();
         calcularTotal();
@@ -160,12 +187,13 @@
       .catch(function (err) {
         btn.disabled = false; btn.textContent = 'Guardar préstamo';
         mensaje('❌ ' + err.message, false);
+        Avatar.decir('triste', 'Uy... ' + err.message, 'gota', 6000);
       });
   }
 
   function cargar() {
     document.getElementById('tarjetas').innerHTML = '<p class="vacio">Cargando...</p>';
-    api('listar').then(function (r) { datos = r; pintar(); })
+    api('listar').then(function (r) { datos = r; pintar(); comentarLista(); })
       .catch(function (err) {
         document.getElementById('tarjetas').innerHTML = '';
         var p = document.createElement('p'); p.className = 'vacio'; p.textContent = 'Error: ' + err.message;
@@ -177,6 +205,22 @@
     var x = document.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x;
   }
 
+  function comentarLista() {
+    var pend = datos.filter(function (p) { return p.estado === 'Pendiente' && p.dias !== null; });
+    var venc = pend.filter(function (p) { return p.dias < 0; }).length;
+    var pronto = pend.filter(function (p) { return p.dias >= 0 && p.dias <= 3; }).length;
+    if (venc) Avatar.decir('triste', 'Ojo: ' + venc + (venc === 1 ? ' préstamo vencido' : ' préstamos vencidos') + '. ¡A cobrar!', 'alerta', 7000);
+    else if (pronto) Avatar.decir('pensando', pronto + (pronto === 1 ? ' préstamo vence' : ' préstamos vencen') + ' en 3 días o menos.', 'duda', 6000);
+    else if (datos.length) Avatar.decir('cool', 'Todo al corriente. Nadie te debe atrasado.', 'estrella', 5000);
+    else Avatar.decir('pensando', 'Todavía no hay préstamos. ¡Anota el primero!', 'duda', 5000);
+  }
+
+  var avisoPct = false;
+  document.getElementById('porcentaje').addEventListener('change', function (e) {
+    var v = parseFloat(e.target.value) || 0;
+    if (v >= 20 && !avisoPct) { avisoPct = true; Avatar.decir('sorpresa', '¡Uf, ' + v + '%! Buen negocio.', 'billete'); }
+  });
+
   function pintar() {
     var cont = document.getElementById('tarjetas'); cont.innerHTML = '';
     var q = document.getElementById('buscar').value.toLowerCase();
@@ -185,7 +229,7 @@
 
     lista.forEach(function (p) {
       var pagado = p.estado === 'Pagado';
-      var clase = 'card', etiqueta = '', color = '#1a73e8';
+      var clase = 'card', etiqueta = '', color = '#0284c7';
       if (pagado) { clase += ' pagado'; etiqueta = 'Pagado'; color = '#1e8e3e'; }
       else if (p.dias < 0) { clase += ' vencido'; etiqueta = 'Vencido hace ' + (-p.dias) + ' día(s)'; color = '#d93025'; }
       else if (p.dias === 0) { clase += ' vencido'; etiqueta = 'Vence HOY'; color = '#d93025'; }
@@ -210,8 +254,14 @@
       var b = el('button', null, pagado ? '↩️ Pendiente' : '✅ Pagado');
       b.onclick = function () {
         b.disabled = true;
-        api('estado', { id: p.id, estado: pagado ? 'Pendiente' : 'Pagado' }).then(cargar)
-          .catch(function (err) { b.disabled = false; alert(err.message); });
+        api('estado', { id: p.id, estado: pagado ? 'Pendiente' : 'Pagado' }).then(function () {
+            cargar();
+            setTimeout(function () {
+              if (pagado) Avatar.decir('pensando', 'Listo, ' + p.nombre + ' vuelve a pendiente.', 'duda');
+              else Avatar.decir('feliz', '¡Cobrado! ' + p.nombre + ' ya te pagó.', 'billete', 5000);
+            }, 900);
+          })
+          .catch(function (err) { b.disabled = false; Avatar.decir('triste', 'Uy... ' + err.message, 'gota', 6000); });
       };
       acc.appendChild(b);
       c.appendChild(acc);
